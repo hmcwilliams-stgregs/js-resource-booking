@@ -185,7 +185,6 @@ export default function ResourceBookingApp() {
 
         const loadedGroups = data.groups ?? [];
         const firstGroupId = loadedGroups[0]?.id ?? null;
-
         setGroups(loadedGroups);
         setResources(data.resources ?? []);
         setBookings(data.bookings ?? []);
@@ -197,9 +196,7 @@ export default function ResourceBookingApp() {
         setNewResourceGroupId(firstGroupId);
       } catch (error) {
         console.error("Failed to load data from Supabase.", error);
-        if (!cancelled) {
-          setLoadError(error instanceof Error ? error.message : "Unable to load data from Supabase.");
-        }
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Unable to load data from Supabase.");
       } finally {
         if (!cancelled) setLoaded(true);
       }
@@ -216,7 +213,6 @@ export default function ResourceBookingApp() {
       setNewResourceGroupId(null);
       return;
     }
-
     const firstGroupId = groups[0].id;
     if (!groups.some((group) => group.id === activeGroupId)) setActiveGroupId(firstGroupId);
     if (!groups.some((group) => group.id === editingGroupId)) setEditingGroupId(firstGroupId);
@@ -273,19 +269,7 @@ export default function ResourceBookingApp() {
   function signOut() { setSessionUser(null); setModal(null); }
 
   function openCreateModal(resourceId, periodId) {
-    const selectedResourceId = resourceId ?? visibleResources[0]?.id ?? null;
-    const selectedPeriodId = periodId ?? periods[0]?.id ?? null;
-
-    if (!selectedResourceId) {
-      setFormError("Create at least one resource before booking.");
-      return;
-    }
-    if (!selectedPeriodId) {
-      setFormError("Add at least one timetable block before booking.");
-      return;
-    }
-
-    setForm({ resourceId: selectedResourceId, periodId: selectedPeriodId, title: "", repeat: "none", occurrences: 4, allDay: false });
+    setForm({ resourceId: resourceId || visibleResources[0]?.id, periodId: periodId || periods[0]?.id, title: "", repeat: "none", occurrences: 4, allDay: false });
     setFormError("");
     setCreateResult(null);
     setModal({ mode: "create" });
@@ -486,7 +470,6 @@ export default function ResourceBookingApp() {
       setResourcePanelError("A group with that name already exists.");
       return;
     }
-
     const newGroup = { id: uid(), name };
     setGroups((prev) => [...prev, newGroup]);
     setPeriodsByGroup((prev) => ({ ...prev, [newGroup.id]: [] }));
@@ -609,7 +592,10 @@ export default function ResourceBookingApp() {
 
   const canCancel = (b) => isAdmin || b.bookedById === sessionUser?.id;
   const detailed = viewMode === "Detailed";
-  const rowH = detailed ? 68 : 44;
+  const rowH =
+    window.innerWidth > 1600
+      ? (detailed ? 52 : 38)
+      : (detailed ? 68 : 44);
 
   if (!loaded) {
     return (
@@ -623,12 +609,11 @@ export default function ResourceBookingApp() {
 
   if (loadError) {
     return (
-      <div style={{ fontFamily: "'Inter', sans-serif", minHeight: 460, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.page, border: `1px solid ${C.border}`, borderRadius: 10, boxSizing: "border-box" }}>
+      <div style={{ fontFamily: "'Inter', sans-serif", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.page, boxSizing: "border-box" }}>
         <style>{FONT_IMPORT}</style>
         <div style={{ width: 460, maxWidth: "100%", padding: 20, background: C.dangerBg, border: `1px solid ${C.danger}`, borderRadius: 8 }}>
           <div style={{ color: C.danger, fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Unable to load Resource Booking</div>
           <div style={{ color: C.danger, fontSize: 13, lineHeight: 1.6 }}>{loadError}</div>
-          <div style={{ color: C.inkSoft, fontSize: 11.5, lineHeight: 1.5, marginTop: 12 }}>Check the Supabase project URL, anonymous key, database schema and row-level security policies.</div>
           <button type="button" onClick={() => window.location.reload()} style={{ marginTop: 14, width: "100%", padding: "9px 12px", border: "none", borderRadius: 6, background: C.purpleBright, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Try again</button>
         </div>
       </div>
@@ -637,11 +622,11 @@ export default function ResourceBookingApp() {
 
   if (groups.length === 0 && users.length === 0) {
     return (
-      <div style={{ fontFamily: "'Inter', sans-serif", minHeight: 460, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.page, border: `1px solid ${C.border}`, borderRadius: 10, boxSizing: "border-box" }}>
+      <div style={{ fontFamily: "'Inter', sans-serif", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.page, boxSizing: "border-box" }}>
         <style>{FONT_IMPORT}</style>
         <div style={{ width: 440, maxWidth: "100%", textAlign: "center" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: C.ink }}>Resource Booking has no setup data</div>
-          <div style={{ marginTop: 8, color: C.inkSoft, fontSize: 13, lineHeight: 1.6 }}>Supabase connected successfully, but no resource groups or application users were returned. Add the initial records to the database before using the application.</div>
+          <div style={{ marginTop: 8, color: C.inkSoft, fontSize: 13, lineHeight: 1.6 }}>Supabase connected successfully, but no resource groups or application users were returned.</div>
         </div>
       </div>
     );
@@ -680,7 +665,7 @@ export default function ResourceBookingApp() {
   }
 
   return (
-    <div style={{ fontFamily: "'Inter', sans-serif", background: C.page, color: C.ink, minHeight: 640, borderRadius: 10, overflow: "hidden", position: "relative", border: `1px solid ${C.border}` }}>
+    <div style={{ fontFamily: "'Inter', sans-serif", background: C.page, color: C.ink, minHeight: "100vh", height: "100vh", borderRadius: 10, overflow: "hidden", position: "relative", border: `1px solid ${C.border}` }}>
       <style>{FONT_IMPORT}</style>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: `1px solid ${C.border}`, background: "#fff", flexWrap: "wrap", gap: 10 }}>
@@ -730,8 +715,13 @@ export default function ResourceBookingApp() {
         </div>
       </div>
 
-      <div style={{ display: "flex" }}>
-        <div style={{ width: 210, borderRight: `1px solid ${C.border}`, background: "#fff", flexShrink: 0, paddingBottom: 16 }}>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "clamp(180px, 15vw, 260px) minmax(0, 1fr)",
+        height: "calc(100vh - 70px)",
+        minHeight: 0,
+      }}>
+        <div style={{ width: "clamp(180px, 15vw, 260px)", borderRight: `1px solid ${C.border}`, background: "#fff", flexShrink: 0, paddingBottom: 16 }}>
           <button onClick={() => setGroupsOpen((o) => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", borderBottom: `1px solid ${C.border}`, cursor: "pointer", padding: "14px 16px", fontSize: 13, fontWeight: 600, color: C.ink }}>
             Resource groups {groupsOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           </button>
@@ -768,7 +758,7 @@ export default function ResourceBookingApp() {
               <div style={{ position: "relative" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.purple}`, borderRadius: 6, padding: "7px 12px", background: "#fff" }}>
                   <Search size={13} color={C.purple} />
-                  <input value={searchText} onChange={(e) => setSearchText(e.target.value)} placeholder="Search for resource" style={{ border: "none", outline: "none", fontSize: 13, color: C.purple, width: 150, background: "transparent" }} />
+                  <input value={searchText} onChange={(e) => setSearchText(e.target.value)} placeholder="Search for resource" style={{ border: "none", outline: "none", fontSize: 13, color: C.purple, width: "clamp(150px, 20vw, 320px)", background: "transparent" }} />
                 </div>
                 {searchMatches.length > 0 && (
                   <div style={{ position: "absolute", top: "110%", left: 0, right: 0, background: "#fff", border: `1px solid ${C.border}`, borderRadius: 6, boxShadow: "0 8px 20px rgba(31,36,48,0.12)", zIndex: 10, overflow: "hidden" }}>
@@ -797,18 +787,18 @@ export default function ResourceBookingApp() {
             </div>
           </div>
 
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ overflow: "auto", height: "calc(100vh - 220px)", minHeight: 0 }}>
             {visibleResources.length === 0 ? (
               <div style={{ padding: 40, textAlign: "center", color: C.inkSoft, fontSize: 13 }}>
                 No resources selected. Search above to add one, or choose a group on the left.
               </div>
             ) : (
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 190 + visibleResources.length * 190 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", tableLayout: "fixed", minWidth: Math.max(640, 150 + visibleResources.length * 140) }}>
                 <thead>
                   <tr>
-                    <th style={{ width: 150, borderBottom: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` }} />
+                    <th style={{ position: "sticky", top: 0, left: 0, zIndex: 30, background: "#fff", width: 150, borderBottom: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}` }} />
                     {visibleResources.map((r) => (
-                      <th key={r.id} style={{ borderBottom: `1px solid ${C.border}`, borderLeft: `1px solid ${C.border}`, padding: "12px 14px", textAlign: "center", minWidth: 190, verticalAlign: "top" }}>
+                      <th key={r.id} style={{ position: "sticky", top: 0, zIndex: 20, background: "#fff", borderBottom: `1px solid ${C.border}`, borderLeft: `1px solid ${C.border}`, padding: "12px 14px", textAlign: "center", minWidth: 140, verticalAlign: "top" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                           <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
                           {isAdmin && (
@@ -833,7 +823,7 @@ export default function ResourceBookingApp() {
                 <tbody>
                   {periods.map((p) => (
                     <tr key={p.id}>
-                      <td style={{ borderBottom: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 14px", height: rowH, background: periodColors(p).bg, color: periodColors(p).text, verticalAlign: "middle" }}>
+                      <td style={{ position: "sticky", left: 0, zIndex: 10, borderBottom: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, padding: "0 14px", height: rowH, background: periodColors(p).bg, color: periodColors(p).text, verticalAlign: "middle" }}>
                         <div style={{ fontSize: 12.5, fontWeight: 500 }}>{p.label}</div>
                         <div style={{ fontSize: 10.5, opacity: 0.85, marginTop: 1 }}>
                           {formatTime12(p.start)} – {formatTime12(p.end)}
