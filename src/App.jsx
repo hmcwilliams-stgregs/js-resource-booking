@@ -5,6 +5,14 @@ import {
   Bell, Inbox, Check, Repeat as RepeatIcon,
 } from "lucide-react";
 import * as api from "./lib/api";
+import {
+  useMsal,
+  useIsAuthenticated,
+  AuthenticatedTemplate,
+  UnauthenticatedTemplate
+} from "@azure/msal-react";
+
+import { loginRequest } from "./authConfig";
 
 const FONT_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');";
 
@@ -135,6 +143,8 @@ function iconBtnStyle() {
 }
 
 export default function ResourceBookingApp() {
+  const { instance } = useMsal();
+  const isAuthenticated = useIsAuthenticated();
   const [resources, setResources] = useState([]);
   const [groups, setGroups] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -144,8 +154,6 @@ export default function ResourceBookingApp() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [sessionUser, setSessionUser] = useState(null);
-  const [loginName, setLoginName] = useState("");
-  const [loginError, setLoginError] = useState("");
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [groupsOpen, setGroupsOpen] = useState(true);
@@ -207,6 +215,75 @@ export default function ResourceBookingApp() {
   }, []);
 
   useEffect(() => {
+  let cancelled = false;
+
+  async function syncMicrosoftUser() {
+    if (!isAuthenticated) {
+      setSessionUser(null);
+      return;
+    }
+
+    const account =
+      instance.getActiveAccount() ||
+      instance.getAllAccounts()[0];
+
+    if (!account) return;
+
+    const email = account.username?.toLowerCase();
+
+    const existingUser = users.find(
+      (u) =>
+        u.email?.toLowerCase() === email ||
+        u.id === account.localAccountId
+    );
+
+    const syncedUser = {
+      id: account.localAccountId,
+      name: account.name,
+      email,
+      role: existingUser?.role || "user",
+    };
+
+    try {
+      await api.upsertUserRow(syncedUser);
+
+      if (cancelled) return;
+
+      setSessionUser(syncedUser);
+
+      setUsers((prev) => {
+        const existing = prev.find(
+          (u) =>
+            u.id === syncedUser.id ||
+            u.email?.toLowerCase() === email
+        );
+
+        if (!existing) {
+          return [...prev, syncedUser];
+        }
+
+        return prev.map((u) =>
+          u.id === existing.id
+            ? syncedUser
+            : u
+        );
+      });
+    } catch (error) {
+      console.error(
+        "Failed to sync Microsoft user:",
+        error
+      );
+    }
+  }
+
+  syncMicrosoftUser();
+
+  return () => {
+    cancelled = true;
+  };
+}, [instance, isAuthenticated, users]);
+
+  useEffect(() => {
     if (groups.length === 0) {
       setActiveGroupId(null);
       setEditingGroupId(null);
@@ -257,16 +334,17 @@ export default function ResourceBookingApp() {
     return bookings.filter((b) => b.resourceId === resourceId && b.date === date && (b.allDay || b.periodId === periodId));
   }
 
-  function signIn() {
-    const name = loginName.trim();
-    if (!name) { setLoginError("Enter your name."); return; }
-    const match = users.find((u) => u.name.toLowerCase() === name.toLowerCase());
-    if (!match) { setLoginError("We couldn't find that account. Ask an admin to add you."); return; }
-    setSessionUser(match);
-    setLoginError("");
-    setLoginName("");
+  async function signIn() {
+    try {
+      await instance.loginPopup(loginRequest);
+    } catch (error) {
+      console.error("Login failed:", error);
+    }
   }
-  function signOut() { setSessionUser(null); setModal(null); }
+  
+  async function signOut() {
+    await instance.logoutPopup();
+  }
 
   function openCreateModal(resourceId, periodId) {
     setForm({ resourceId: resourceId || visibleResources[0]?.id, periodId: periodId || periods[0]?.id, title: "", repeat: "none", occurrences: 4, allDay: false });
@@ -643,17 +721,20 @@ export default function ResourceBookingApp() {
           </div>
           <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
             <label style={labelStyle()}>Name</label>
-            <input
-              autoFocus
-              value={loginName}
-              onChange={(e) => setLoginName(e.target.value)}
-              placeholder="Enter your name"
-              style={{ ...fieldStyle(), marginBottom: 10 }}
-              onKeyDown={(e) => { if (e.key === "Enter") signIn(); }}
-            />
-            {loginError && <div style={{ fontSize: 12, color: C.danger, marginBottom: 10 }}>{loginError}</div>}
-            <button onClick={signIn} style={{ width: "100%", background: C.purpleBright, color: "#fff", border: "none", borderRadius: 6, padding: "9px 0", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              Sign in
+            <button
+              onClick={signIn}
+              style={{
+                width: "100%",
+                background: C.purpleBright,
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "10px",
+                fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              Sign in with Microsoft 365
             </button>
             <div style={{ fontSize: 10.5, color: C.inkSoft, marginTop: 10, lineHeight: 1.5 }}>
               Don't have an account? Ask an admin to add you.
