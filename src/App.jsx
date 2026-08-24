@@ -86,23 +86,6 @@ function parseCsvUsers(text, existingUsers) {
   return { added, skipped };
 }
 
-=> {
-  const today = toISODate(new Date());
-  const base = { status: "confirmed", recurrenceId: null, allDay: false, groupId: "g1" };
-  return [
-    { id: uid(), resourceId: "r1", date: today, periodId: "homeroom", title: "Homeroom", bookedById: "u2", bookedBy: "Julie Stewart", ...base },
-    { id: uid(), resourceId: "r1", date: today, periodId: "p1", title: "Period 1", bookedById: "u2", bookedBy: "Julie Stewart", ...base },
-    { id: uid(), resourceId: "r1", date: today, periodId: "p2", title: "Period 2", bookedById: "u2", bookedBy: "Julie Stewart", ...base },
-    { id: uid(), resourceId: "r2", date: today, periodId: "homeroom", title: "Homeroom", bookedById: "u2", bookedBy: "Julie Stewart", ...base },
-    { id: uid(), resourceId: "r2", date: today, periodId: "p1", title: "Period 1", bookedById: "u2", bookedBy: "Julie Stewart", ...base },
-    { id: uid(), resourceId: "r4", date: today, periodId: "morning", title: "Assembly", bookedById: "u3", bookedBy: "Barry Graham", ...base },
-    { id: uid(), resourceId: "r4", date: today, periodId: "homeroom", title: "Homeroom", bookedById: "u3", bookedBy: "Barry Graham", ...base },
-    { id: uid(), resourceId: "r4", date: today, periodId: "p1", title: "Period 1", bookedById: "u3", bookedBy: "Barry Graham", ...base },
-    { id: uid(), resourceId: "r5", date: today, periodId: "p1", title: "11MSA / 11MSB", bookedById: "u4", bookedBy: "Trudy Sawyer", ...base },
-    { id: uid(), resourceId: "r5", date: today, periodId: "p3", title: "8MAA and 8MAB", bookedById: "u4", bookedBy: "Trudy Sawyer", ...base },
-  ];
-};
-
 function Modal({ children, onClose, title, width = 400 }) {
   return (
     <div onClick={onClose} style={{
