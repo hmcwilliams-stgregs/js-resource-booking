@@ -6,6 +6,5 @@ import react from "@vitejs/plugin-react";
 // BASE_PATH automatically from the repo name — for local `npm run build`
 // you generally don't need to touch this (dev server always uses "/").
 export default defineConfig({
-  plugins: [react()],
-  base: '/',
-});
+base: '/js-resource-booking/'
+})
