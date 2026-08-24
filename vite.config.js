@@ -7,5 +7,5 @@ import react from "@vitejs/plugin-react";
 // you generally don't need to touch this (dev server always uses "/").
 export default defineConfig({
   plugins: [react()],
-  base: process.env.BASE_PATH || "/",
+  base: process.env.BASE_PATH || "/js-resource-booking/",
 });
