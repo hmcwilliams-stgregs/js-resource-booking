@@ -44,7 +44,12 @@ export async function loadAll() {
     periodsByGroup[p.group_id].push(period);
   }
 
-  const users = usersRes.data.map((u) => ({ id: u.id, name: u.name, role: u.role }));
+   const users = usersRes.data.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role
+  }));
 
   const bookings = bookingsRes.data.map((b) => ({
     id: b.id,
@@ -123,8 +128,18 @@ export async function deletePeriodsForGroup(groupId) {
 // ---------- Users ----------
 
 export async function upsertUserRow(u) {
-  return throwIfError(await supabase.from("app_users").upsert({ id: u.id, name: u.name, role: u.role }));
+  return throwIfError(
+    await supabase
+      .from("app_users")
+      .upsert({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role
+      })
+  );
 }
+
 export async function deleteUserRow(id) {
   return throwIfError(await supabase.from("app_users").delete().eq("id", id));
 }
