@@ -543,7 +543,6 @@ if (repeat === "none") {
       repeatEndDate
     );
 }
-    const dates = computeRecurringDates(selectedDate, repeat, count);
     const recurrenceId = repeat === "none" ? null : uid();
     const pending = !!resource.requiresApproval && !isAdmin;
     const status = pending ? "pending" : "confirmed";
