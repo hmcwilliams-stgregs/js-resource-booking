@@ -73,6 +73,13 @@ function formatDateShort(iso) {
 }
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
+function getGroupList(envValue) {
+  return (envValue || "")
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+}
+
 function parseCsvUsers(text, existingUsers) {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const added = [];
@@ -233,6 +240,41 @@ export default function ResourceBookingApp() {
       const email = account.username?.trim().toLowerCase();
       const name = account.name?.trim() || email;
 
+      const groups =
+  account.idTokenClaims?.groups || [];
+
+const accessGroups = getGroupList(
+  import.meta.env.VITE_BOOKING_ACCESS_GROUPS
+);
+
+const adminGroups = getGroupList(
+  import.meta.env.VITE_BOOKING_ADMIN_GROUPS
+);
+
+const hasAccess =
+  groups.some((groupId) =>
+    accessGroups.includes(groupId)
+  );
+
+const isAdmin =
+  groups.some((groupId) =>
+    adminGroups.includes(groupId)
+  );
+
+      if (!hasAccess) {
+  setLoadError(
+    "You do not have permission to access Resource Booking."
+  );
+
+  try {
+    await instance.logoutPopup();
+  } catch (e) {
+    console.error(e);
+  }
+
+  return;
+}
+
       if (!entraId || !email) {
         console.error("Microsoft account did not return the required identity values.");
         return;
@@ -245,12 +287,12 @@ export default function ResourceBookingApp() {
       );
 
       const syncedUser = {
-        id: existingUser?.id || crypto.randomUUID(),
-        entraId,
-        name,
-        email,
-        role: existingUser?.role || "user",
-      };
+  id: existingUser?.id || crypto.randomUUID(),
+  entraId,
+  name,
+  email,
+  role: isAdmin ? "admin" : "user",
+};
 
       try {
         await api.upsertUserRow(syncedUser);
