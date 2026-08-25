@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  ChevronLeft, ChevronRight, Search, RotateCcw, CalendarPlus, ChevronDown, ChevronUp,
+  ChevronLeft, ChevronRight, Calendar, Search, RotateCcw, CalendarPlus, ChevronDown, ChevronUp,
   Info, X, Trash2, Plus, Loader2, ShieldCheck, LogOut, Clock, Upload, ArrowUp, ArrowDown, Boxes,
   Bell, Inbox, Check, Repeat as RepeatIcon,
 } from "lucide-react";
@@ -50,6 +50,7 @@ function periodColors(p) {
 function pad(n) { return String(n).padStart(2, "0"); }
 function toISODate(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function addDays(d, n) { const nd = new Date(d); nd.setDate(nd.getDate() + n); return nd; }
+function toDateInputValue(date) { return date.toISOString().split("T")[0]; }
 function formatDate(d) { return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" }); }
 function formatShort(d) { return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); }
 function getWeekStart(d) {
@@ -140,8 +141,10 @@ export default function ResourceBookingApp() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [sessionUser, setSessionUser] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [activeGroupId, setActiveGroupId] = useState(null);
   const [editingGroupId, setEditingGroupId] = useState(null);
@@ -161,6 +164,9 @@ export default function ResourceBookingApp() {
   const [newGroupName, setNewGroupName] = useState("");
   const [resourcePanelError, setResourcePanelError] = useState("");
   const [saveState, setSaveState] = useState("idle");
+
+  const fileInputRef = useRef(null);
+  const datePickerRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -303,6 +309,29 @@ const isAdmin =
       cancelled = true;
     };
   }, [instance, isAuthenticated, loaded]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        datePickerRef.current &&
+        !datePickerRef.current.contains(event.target)
+      ) {
+        setShowDatePicker(false);
+      }
+    }
+  
+    document.addEventListener(
+      "mousedown",
+      handleClickOutside
+    );
+  
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleClickOutside
+      );
+    };
+  }, []);
 
   useEffect(() => {
     if (groups.length === 0) {
@@ -806,9 +835,118 @@ const isAdmin =
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
               <button aria-label="Previous day" onClick={() => setSelectedDate((d) => addDays(d, -1))} style={{ ...toolBtn(), padding: "7px 9px" }}><ChevronLeft size={14} /></button>
-              <div style={{ border: `1px solid ${C.purple}`, borderRadius: 6, padding: "7px 12px", fontSize: 13, fontWeight: 500, color: C.purple, background: "#fff", whiteSpace: "nowrap" }}>
-                {formatDate(selectedDate)}
-              </div>
+              <div
+  ref={datePickerRef}
+  style={{
+    position: "relative"
+  }}
+>
+  <button
+    type="button"
+    onClick={() =>
+      setShowDatePicker(
+        (prev) => !prev
+      )
+    }
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      border: `1px solid ${C.purple}`,
+      borderRadius: 6,
+      padding: "7px 12px",
+      fontSize: 13,
+      fontWeight: 500,
+      color: C.purple,
+      background: "#fff",
+      cursor: "pointer"
+    }}
+  >
+    <Calendar size={14} />
+    {formatDate(selectedDate)}
+  </button>
+
+  {showDatePicker && (
+    <div
+      style={{
+        position: "absolute",
+        top: "110%",
+        left: 0,
+        zIndex: 100,
+        background: "#fff",
+        border: `1px solid ${C.border}`,
+        borderRadius: 8,
+        padding: 12,
+        minWidth: 220,
+        boxShadow:
+          "0 8px 24px rgba(31,36,48,0.12)"
+      }}
+    >
+      <input
+        type="date"
+        value={toDateInputValue(
+          selectedDate
+        )}
+        onChange={(e) => {
+          setSelectedDate(
+            new Date(
+              e.target.value +
+              "T00:00:00"
+            )
+          );
+
+          setShowDatePicker(false);
+        }}
+        style={fieldStyle()}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          marginTop: 10
+        }}
+      >
+        <button
+          onClick={() => {
+            setSelectedDate(
+              new Date()
+            );
+            setShowDatePicker(false);
+          }}
+          style={toolBtn()}
+        >
+          Today
+        </button>
+
+        <button
+          onClick={() => {
+            setSelectedDate(
+              addDays(new Date(), 1)
+            );
+            setShowDatePicker(false);
+          }}
+          style={toolBtn()}
+        >
+          Tomorrow
+        </button>
+
+        <button
+          onClick={() => {
+            setSelectedDate(
+              addDays(new Date(), 7)
+            );
+            setShowDatePicker(false);
+          }}
+          style={toolBtn()}
+        >
+          Next Week
+        </button>
+      </div>
+    </div>
+  )}
+</div>
               <button aria-label="Next day" onClick={() => setSelectedDate((d) => addDays(d, 1))} style={{ ...toolBtn(), padding: "7px 9px" }}><ChevronRight size={14} /></button>
               <div style={{ position: "relative" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.purple}`, borderRadius: 6, padding: "7px 12px", background: "#fff" }}>
