@@ -1180,48 +1180,6 @@ const isAdmin =
         );
       })()}
 
-            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, marginTop: 4 }}>
-              <label style={labelStyle()}>Add one user</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)} placeholder="Name" style={{ ...fieldStyle(), flex: 1 }} />
-                <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)} style={{ ...fieldStyle(), width: 110 }}>
-                  <option value="user">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <button onClick={addUserFromPanel} style={{ marginTop: 8, width: "100%", background: C.purpleBright, color: "#fff", border: "none", borderRadius: 6, padding: "8px 0", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Add user</button>
-            </div>
-
-            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, marginTop: 4 }}>
-              <label style={labelStyle()}>Import users from CSV</label>
-              <div style={{ fontSize: 10.5, color: C.inkSoft, marginBottom: 6 }}>Format: <code>name,role</code> — one per line. Role is "admin" or "user" (defaults to user).</div>
-              <textarea
-                value={csvText}
-                onChange={(e) => setCsvText(e.target.value)}
-                placeholder={"name,role\nJulie Stewart,user\nA. Marsh,admin"}
-                rows={4}
-                style={{ ...fieldStyle(), fontFamily: "'Inter', sans-serif", fontSize: 12, resize: "vertical" }}
-              />
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleCsvFile} style={{ display: "none" }} />
-                <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 0", fontSize: 12.5, color: C.ink, cursor: "pointer" }}>
-                  <Upload size={13} /> Upload .csv
-                </button>
-                <button onClick={importCsv} style={{ flex: 1, background: C.purpleBright, color: "#fff", border: "none", borderRadius: 6, padding: "8px 0", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-                  Import
-                </button>
-              </div>
-              {csvResult && (
-                <div style={{ marginTop: 8, fontSize: 12, background: C.successBg, color: C.successText, borderRadius: 5, padding: "7px 10px" }}>
-                  Added {csvResult.added} user{csvResult.added === 1 ? "" : "s"}{csvResult.skipped > 0 ? `, skipped ${csvResult.skipped} duplicate${csvResult.skipped === 1 ? "" : "s"}` : ""}.
-                </div>
-              )}
-              {userPanelError && <div style={{ fontSize: 12, color: C.danger, marginTop: 8 }}>{userPanelError}</div>}
-            </div>
-          </div>
-        </Modal>
-      )}
-
       {modal?.mode === "resources" && isAdmin && (
         <Modal onClose={closeModal} title="Manage resources & groups" width={560}>
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
