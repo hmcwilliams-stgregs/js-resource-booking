@@ -81,6 +81,21 @@ function getGroupList(envValue) {
     .filter(Boolean);
 }
 
+function getCurrentTerm(
+  date,
+  terms
+) {
+  const iso = toISODate(date);
+
+  return terms.find(
+    (term) =>
+      term.start &&
+      term.end &&
+      iso >= term.start &&
+      iso <= term.end
+  );
+}
+
 function Modal({ children, onClose, title, width = 400 }) {
   return (
     <div onClick={onClose} style={{
@@ -152,7 +167,12 @@ export default function ResourceBookingApp() {
   const [viewMode, setViewMode] = useState("Detailed");
 
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({});
+  const [form, setForm] = useState({
+  title: "",
+  repeat: "none",
+  repeatEndType: "term",
+  repeatEndDate: "",
+});
   const [formError, setFormError] = useState("");
   const [createResult, setCreateResult] = useState(null);
   const [newResourceName, setNewResourceName] = useState("");
@@ -166,6 +186,33 @@ export default function ResourceBookingApp() {
 
   const fileInputRef = useRef(null);
   const datePickerRef = useRef(null);
+
+  const [terms, setTerms] = useState([
+  {
+    id: "term1",
+    name: "Term 1",
+    start: "",
+    end: "",
+  },
+  {
+    id: "term2",
+    name: "Term 2",
+    start: "",
+    end: "",
+  },
+  {
+    id: "term3",
+    name: "Term 3",
+    start: "",
+    end: "",
+  },
+  {
+    id: "term4",
+    name: "Term 4",
+    start: "",
+    end: "",
+  }
+]);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,14 +278,15 @@ const adminGroups = getGroupList(
   import.meta.env.VITE_BOOKING_ADMIN_GROUPS
 );
 
-const hasAccess =
-  groups.some((groupId) =>
-    accessGroups.includes(groupId)
-  );
-
 const isAdmin =
   groups.some((groupId) =>
     adminGroups.includes(groupId)
+  );
+
+const hasAccess =
+  isAdmin ||
+  groups.some((groupId) =>
+    accessGroups.includes(groupId)
   );
 
       if (!hasAccess) {
@@ -364,6 +412,7 @@ const isAdmin =
   }
 
   const dateKey = toISODate(selectedDate);
+  const currentTerm = getCurrentTerm(selectedDate, terms);
   const isAdmin = sessionUser?.role === "admin";
   const pendingBookings = bookings.filter((b) => b.status === "pending").sort((a, b) => (a.date + (a.periodId || "")).localeCompare(b.date + (b.periodId || "")));
   const myNotifications = sessionUser ? notifications.filter((n) => n.userId === sessionUser.id) : [];
@@ -395,7 +444,15 @@ const isAdmin =
   }
 
   function openCreateModal(resourceId, periodId) {
-    setForm({ resourceId: resourceId || visibleResources[0]?.id, periodId: periodId || periods[0]?.id, title: "", repeat: "none", occurrences: 4, allDay: false });
+    setForm({
+  resourceId,
+  periodId,
+  title: "",
+  repeat: "none",
+  repeatEndType: "term",
+  repeatEndDate: "",
+  allDay: false
+});
     setFormError("");
     setCreateResult(null);
     setModal({ mode: "create" });
@@ -417,10 +474,34 @@ const isAdmin =
     runPersist(() => api.deleteNotificationsByUserRow(sessionUser.id));
   }
 
-  function computeRecurringDates(startDate, repeat, count) {
-    const step = repeat === "weekly" ? 7 : 1;
-    return Array.from({ length: count }, (_, i) => addDays(startDate, i * step));
+  function computeRecurringDates(
+  startDate,
+  repeat,
+  endDate
+) {
+  const dates = [];
+
+  const step =
+    repeat === "weekly"
+      ? 7
+      : 1;
+
+  let current =
+    new Date(startDate);
+
+  while (current <= endDate) {
+    dates.push(
+      new Date(current)
+    );
+
+    current = addDays(
+      current,
+      step
+    );
   }
+
+  return dates;
+}
 
   function submitBooking() {
     const { resourceId, periodId, title, allDay } = form;
@@ -432,7 +513,36 @@ const isAdmin =
     const bookingGroupId = activeGroupId;
 
     const repeat = form.repeat || "none";
-    const count = repeat === "none" ? 1 : Math.min(52, Math.max(2, Number(form.occurrences) || 2));
+    let dates;
+
+if (repeat === "none") {
+  dates = [selectedDate];
+} else {
+  let repeatEndDate;
+
+  if (
+    form.repeatEndType === "term"
+  ) {
+    repeatEndDate =
+      new Date(
+        currentTerm.end +
+        "T00:00:00"
+      );
+  } else {
+    repeatEndDate =
+      new Date(
+        form.repeatEndDate +
+        "T00:00:00"
+      );
+  }
+
+  dates =
+    computeRecurringDates(
+      selectedDate,
+      repeat,
+      repeatEndDate
+    );
+}
     const dates = computeRecurringDates(selectedDate, repeat, count);
     const recurrenceId = repeat === "none" ? null : uid();
     const pending = !!resource.requiresApproval && !isAdmin;
@@ -673,6 +783,21 @@ const isAdmin =
     runPersist(() => api.deleteBookingsByPeriodRow(id));
   }
 
+  function updateTerm(id, field, value) {
+  setTerms((prev) =>
+    prev.map((term) =>
+      term.id === id
+        ? {
+            ...term,
+            [field]: value,
+          }
+        : term
+    )
+  );
+
+  // TODO - persist to Supabase later
+}
+
   const canCancel = (b) => isAdmin || b.bookedById === sessionUser?.id;
   const detailed = viewMode === "Detailed";
   const rowH =
@@ -776,6 +901,25 @@ const isAdmin =
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setModal({ mode: "terms" })}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "none",
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  padding: "7px 10px",
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  color: C.ink
+                }}
+              >
+                <Calendar size={13} />
+                Term Dates
+              </button>
             </>
           )}
           <button aria-label="Notifications" onClick={() => setModal({ mode: "notifications" })} style={{ position: "relative", ...iconBtnStyle() }}>
@@ -862,7 +1006,23 @@ const isAdmin =
     }}
   >
     <Calendar size={14} />
-    {formatDate(selectedDate)}
+{formatDate(selectedDate)}
+
+{currentTerm && (
+  <span
+    style={{
+      marginLeft: 6,
+      padding: "2px 8px",
+      borderRadius: 12,
+      background: C.lavender,
+      color: C.purpleDeep,
+      fontSize: 11,
+      fontWeight: 600,
+    }}
+  >
+    {currentTerm.name}
+  </span>
+)}
   </button>
 
   {showDatePicker && (
@@ -1120,13 +1280,69 @@ const isAdmin =
                       <option value="weekly">Weekly</option>
                     </select>
                   </div>
-                  {form.repeat && form.repeat !== "none" && (
-                    <div style={{ width: 110 }}>
-                      <label style={labelStyle()}>Occurrences</label>
-                      <input type="number" min={2} max={52} value={form.occurrences || 4} onChange={(e) => setForm((f) => ({ ...f, occurrences: e.target.value }))} style={fieldStyle()} />
-                    </div>
-                  )}
+                  {form.repeat !== "none" && (
+  <div style={{ flex: 1 }}>
+    <label style={labelStyle()}>
+      Repeat Until
+    </label>
+
+    <select
+      value={form.repeatEndType}
+      onChange={(e) =>
+        setForm((f) => ({
+          ...f,
+          repeatEndType: e.target.value,
+        }))
+      }
+      style={fieldStyle()}
+    >
+      <option value="term">
+        End of {currentTerm?.name || "Current Term"}
+      </option>
+
+      <option value="date">
+        Specific Date
+      </option>
+    </select>
+  </div>
+)}
                 </div>
+                {form.repeatEndType === "date" &&
+ form.repeat !== "none" && (
+  <div>
+    <label style={labelStyle()}>
+      End Date
+    </label>
+
+    <input
+      type="date"
+      value={form.repeatEndDate}
+      onChange={(e) =>
+        setForm((f) => ({
+          ...f,
+          repeatEndDate: e.target.value,
+        }))
+      }
+      style={fieldStyle()}
+    />
+  </div>
+)}
+                {form.repeatEndType === "term" &&
+ currentTerm &&
+ form.repeat !== "none" && (
+  <div
+    style={{
+      fontSize: 11,
+      color: C.inkSoft,
+    }}
+  >
+    Repeats until the end of
+    {" "}
+    {currentTerm.name}
+    {" "}
+    ({formatDateShort(currentTerm.end)})
+  </div>
+)}
                 {form.repeat && form.repeat !== "none" && (
                   <div style={{ fontSize: 11, color: C.inkSoft }}>
                     <RepeatIcon size={11} style={{ verticalAlign: -1, marginRight: 4 }} />
@@ -1597,6 +1813,89 @@ const isAdmin =
           </div>
         </Modal>
       )}
+
+      {modal?.mode === "terms" && isAdmin && (
+  <Modal
+    onClose={closeModal}
+    title="Manage Term Dates"
+    width={600}
+  >
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
+      {terms.map((term) => (
+        <div
+          key={term.id}
+          style={{
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: 12,
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 600,
+              marginBottom: 10,
+            }}
+          >
+            {term.name}
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "1fr 1fr",
+              gap: 10,
+            }}
+          >
+            <div>
+              <label style={labelStyle()}>
+                Start Date
+              </label>
+
+              <input
+                type="date"
+                value={term.start}
+                onChange={(e) =>
+                  updateTerm(
+                    term.id,
+                    "start",
+                    e.target.value
+                  )
+                }
+                style={fieldStyle()}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle()}>
+                End Date
+              </label>
+
+              <input
+                type="date"
+                value={term.end}
+                onChange={(e) =>
+                  updateTerm(
+                    term.id,
+                    "end",
+                    e.target.value
+                  )
+                }
+                style={fieldStyle()}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </Modal>
+)}
 
       {modal?.mode === "approvals" && isAdmin && (() => {
         const groupedIds = new Set();
