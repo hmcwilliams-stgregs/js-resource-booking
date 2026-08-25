@@ -45,11 +45,12 @@ export async function loadAll() {
   }
 
    const users = usersRes.data.map((u) => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: u.role
-  }));
+  id: u.id,
+  entraId: u.entra_id,
+  name: u.name,
+  email: u.email,
+  role: u.role,
+}));
 
   const bookings = bookingsRes.data.map((b) => ({
     id: b.id,
@@ -131,12 +132,18 @@ export async function upsertUserRow(u) {
   return throwIfError(
     await supabase
       .from("app_users")
-      .upsert({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        role: u.role
-      })
+      .upsert(
+        {
+          id: u.id,
+          entra_id: u.entraId || null,
+          name: u.name,
+          email: u.email || null,
+          role: u.role,
+        },
+        {
+          onConflict: "id",
+        }
+      )
   );
 }
 
