@@ -144,7 +144,6 @@ export default function ResourceBookingApp() {
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [activeGroupId, setActiveGroupId] = useState(null);
   const [editingGroupId, setEditingGroupId] = useState(null);
