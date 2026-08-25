@@ -1121,59 +1121,259 @@ const isAdmin =
 
       {modal?.mode === "timetable" && isAdmin && (() => {
         const editPeriods = periodsFor(editingGroupId);
+
         return (
-          <Modal onClose={closeModal} title="Edit timetable" width={560}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div>
-                <label style={labelStyle()}>Resource group</label>
-                <select value={editingGroupId} onChange={(e) => setEditingGroupId(e.target.value)} style={fieldStyle()}>
-                  {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "22px 1fr 92px 84px 84px 26px", gap: 6, fontSize: 10, fontWeight: 600, color: C.inkSoft, textTransform: "uppercase", letterSpacing: "0.03em", padding: "0 2px" }}>
-                <span />
-                <span>Label</span>
-                <span>Type</span>
-                <span>Start</span>
-                <span>End</span>
-                <span />
-              </div>
-              {editPeriods.map((p, i) => (
-                <div key={p.id}>
-                  <div style={{ display: "grid", gridTemplateColumns: "22px 1fr 92px 84px 84px 26px", gap: 6, alignItems: "center" }}>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <button aria-label="Move up" disabled={i === 0} onClick={() => movePeriod(editingGroupId, i, -1)} style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", color: i === 0 ? C.border : C.inkSoft, padding: 0 }}><ArrowUp size={12} /></button>
-                      <button aria-label="Move down" disabled={i === editPeriods.length - 1} onClick={() => movePeriod(editingGroupId, i, 1)} style={{ background: "none", border: "none", cursor: i === editPeriods.length - 1 ? "default" : "pointer", color: i === editPeriods.length - 1 ? C.border : C.inkSoft, padding: 0 }}><ArrowDown size={12} /></button>
-                    </div>
-                    <input value={p.label} onChange={(e) => updatePeriod(editingGroupId, p.id, "label", e.target.value)} style={{ ...fieldStyle(), padding: "6px 8px", fontSize: 12.5 }} />
-                    <select value={p.type} onChange={(e) => updatePeriod(editingGroupId, p.id, "type", e.target.value)} style={{ ...fieldStyle(), padding: "6px 4px", fontSize: 12 }}>
-                      <option value="period">Period</option>
-                      <option value="break">Break</option>
-                    </select>
-                    <input type="time" value={p.start} onChange={(e) => updatePeriod(editingGroupId, p.id, "start", e.target.value)} style={{ ...fieldStyle(), padding: "6px 4px", fontSize: 11.5 }} />
-                    <input type="time" value={p.end} onChange={(e) => updatePeriod(editingGroupId, p.id, "end", e.target.value)} style={{ ...fieldStyle(), padding: "6px 4px", fontSize: 11.5 }} />
-                    <button aria-label={`Remove ${p.label}`} onClick={() => removePeriod(editingGroupId, p.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.inkSoft }}><Trash2 size={13} /></button>
-                  </div>
-                  <button onClick={() => insertPeriodAt(editingGroupId, i)} style={{
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 4, width: "100%",
-                    background: "none", border: "none", cursor: "pointer", color: C.lavenderBorder,
-                    padding: "3px 0", fontSize: 10, marginTop: 1,
-                  }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = C.purple; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = C.lavenderBorder; }}
+          <Modal onClose={closeModal} title="Edit timetable" width={780}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(220px, 1fr) auto",
+                  gap: 12,
+                  alignItems: "end",
+                }}
+              >
+                <div>
+                  <label style={labelStyle()}>Resource group</label>
+                  <select
+                    value={editingGroupId || ""}
+                    onChange={(e) => setEditingGroupId(e.target.value)}
+                    style={fieldStyle()}
                   >
-                    <Plus size={11} /> Insert block here
-                  </button>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              ))}
-              {editPeriods.length === 0 && (
-                <div style={{ fontSize: 12, color: C.inkSoft, textAlign: "center", padding: "10px 0" }}>No blocks yet — add one below.</div>
-              )}
-              <button onClick={() => addPeriod(editingGroupId)} style={{ marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "none", border: `1px dashed ${C.lavenderBorder}`, borderRadius: 6, padding: "8px 0", fontSize: 12.5, color: C.purple, cursor: "pointer" }}>
-                <Plus size={13} /> Add block at end
+
+                <div
+                  style={{
+                    minWidth: 150,
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    background: C.toolbar,
+                    border: `1px solid ${C.border}`,
+                    color: C.inkSoft,
+                    fontSize: 12,
+                    textAlign: "center",
+                  }}
+                >
+                  {editPeriods.length} block{editPeriods.length === 1 ? "" : "s"}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  maxHeight: "58vh",
+                  overflowY: "auto",
+                  paddingRight: 4,
+                }}
+              >
+                {editPeriods.map((p, i) => {
+                  const isBreak = p.type === "break";
+
+                  return (
+                    <React.Fragment key={p.id}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "34px minmax(180px, 1fr) 110px 112px 20px 112px 34px",
+                          gap: 8,
+                          alignItems: "center",
+                          padding: 10,
+                          borderRadius: 8,
+                          background: isBreak ? "#FFF8E8" : "#FFFFFF",
+                          border: `1px solid ${isBreak ? C.break : C.border}`,
+                          boxShadow: "0 1px 2px rgba(31,36,48,0.04)",
+                        }}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <button
+                            type="button"
+                            aria-label={`Move ${p.label} up`}
+                            title="Move up"
+                            disabled={i === 0}
+                            onClick={() => movePeriod(editingGroupId, i, -1)}
+                            style={{
+                              ...iconBtnStyle(),
+                              width: 30,
+                              height: 26,
+                              opacity: i === 0 ? 0.35 : 1,
+                              cursor: i === 0 ? "default" : "pointer",
+                            }}
+                          >
+                            <ArrowUp size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Move ${p.label} down`}
+                            title="Move down"
+                            disabled={i === editPeriods.length - 1}
+                            onClick={() => movePeriod(editingGroupId, i, 1)}
+                            style={{
+                              ...iconBtnStyle(),
+                              width: 30,
+                              height: 26,
+                              opacity: i === editPeriods.length - 1 ? 0.35 : 1,
+                              cursor: i === editPeriods.length - 1 ? "default" : "pointer",
+                            }}
+                          >
+                            <ArrowDown size={13} />
+                          </button>
+                        </div>
+
+                        <div>
+                          <label style={labelStyle()}>Label</label>
+                          <input
+                            value={p.label}
+                            onChange={(e) => updatePeriod(editingGroupId, p.id, "label", e.target.value)}
+                            style={fieldStyle()}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={labelStyle()}>Type</label>
+                          <select
+                            value={p.type}
+                            onChange={(e) => updatePeriod(editingGroupId, p.id, "type", e.target.value)}
+                            style={fieldStyle()}
+                          >
+                            <option value="period">Period</option>
+                            <option value="break">Break</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={labelStyle()}>Start</label>
+                          <input
+                            type="time"
+                            value={p.start}
+                            onChange={(e) => updatePeriod(editingGroupId, p.id, "start", e.target.value)}
+                            style={fieldStyle()}
+                          />
+                        </div>
+
+                        <div
+                          aria-hidden="true"
+                          style={{
+                            marginTop: 19,
+                            textAlign: "center",
+                            color: C.inkSoft,
+                            fontSize: 14,
+                          }}
+                        >
+                          →
+                        </div>
+
+                        <div>
+                          <label style={labelStyle()}>End</label>
+                          <input
+                            type="time"
+                            value={p.end}
+                            onChange={(e) => updatePeriod(editingGroupId, p.id, "end", e.target.value)}
+                            style={fieldStyle()}
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          aria-label={`Remove ${p.label}`}
+                          title="Remove block"
+                          onClick={() => removePeriod(editingGroupId, p.id)}
+                          style={{
+                            ...iconBtnStyle(),
+                            marginTop: 19,
+                            color: C.danger,
+                            borderColor: "transparent",
+                          }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => insertPeriodAt(editingGroupId, i)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                          width: "100%",
+                          minHeight: 30,
+                          marginTop: -4,
+                          background: "#FCFAFE",
+                          border: `1px dashed ${C.lavenderBorder}`,
+                          borderRadius: 6,
+                          color: C.purple,
+                          fontSize: 11.5,
+                          fontWeight: 500,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Plus size={12} /> Add block here
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+
+                {editPeriods.length === 0 && (
+                  <div
+                    style={{
+                      padding: "28px 18px",
+                      border: `1px dashed ${C.lavenderBorder}`,
+                      borderRadius: 8,
+                      background: "#FCFAFE",
+                      textAlign: "center",
+                      color: C.inkSoft,
+                      fontSize: 12.5,
+                    }}
+                  >
+                    No timetable blocks have been created for this resource group.
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => addPeriod(editingGroupId)}
+                disabled={!editingGroupId}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 7,
+                  width: "100%",
+                  padding: "10px 14px",
+                  background: C.purpleBright,
+                  border: "none",
+                  borderRadius: 6,
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: editingGroupId ? "pointer" : "default",
+                  opacity: editingGroupId ? 1 : 0.5,
+                }}
+              >
+                <Plus size={14} /> Add block at end
               </button>
-              <div style={{ fontSize: 10.5, color: C.inkSoft, marginTop: 4 }}>
-                A "block" is any row in the timetable — a teaching period, a break, an assembly, or anything else you need. Periods and breaks each use their own fixed color automatically. Each resource group keeps its own timetable, so switch the group above to edit another one. Changes apply immediately and are shared with everyone using the system.
+
+              <div
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 6,
+                  background: C.toolbar,
+                  color: C.inkSoft,
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                }}
+              >
+                Periods use a white row and breaks use an amber row. Changes are saved automatically and apply to everyone using this resource group.
               </div>
             </div>
           </Modal>
