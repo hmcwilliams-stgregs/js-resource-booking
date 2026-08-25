@@ -7,9 +7,7 @@ import {
 import * as api from "./lib/api";
 import {
   useMsal,
-  useIsAuthenticated,
-  AuthenticatedTemplate,
-  UnauthenticatedTemplate
+  useIsAuthenticated
 } from "@azure/msal-react";
 
 import { loginRequest } from "./authConfig";
@@ -89,7 +87,7 @@ function parseCsvUsers(text, existingUsers) {
     role = role === "admin" ? "admin" : "user";
     if (seen.has(name.toLowerCase())) { skipped.push(name); continue; }
     seen.add(name.toLowerCase());
-    added.push({ id: uid(), name, role });
+    added.push({ id: crypto.randomUUID(), entraId: null, name, email: null, role });
   }
   return { added, skipped };
 }
@@ -215,73 +213,79 @@ export default function ResourceBookingApp() {
   }, []);
 
   useEffect(() => {
-  let cancelled = false;
+    let cancelled = false;
 
-  async function syncMicrosoftUser() {
-    if (!isAuthenticated) {
-      setSessionUser(null);
-      return;
-    }
+    async function syncMicrosoftUser() {
+      if (!loaded) return;
 
-    const account =
-      instance.getActiveAccount() ||
-      instance.getAllAccounts()[0];
+      if (!isAuthenticated) {
+        if (!cancelled) setSessionUser(null);
+        return;
+      }
 
-    if (!account) return;
+      const account =
+        instance.getActiveAccount() ||
+        instance.getAllAccounts()[0];
 
-    const email = account.username?.toLowerCase();
+      if (!account) return;
 
-    const existingUser = users.find(
-      (u) =>
-        u.email?.toLowerCase() === email ||
-        u.id === account.localAccountId
-    );
+      const entraId = account.localAccountId;
+      const email = account.username?.trim().toLowerCase();
+      const name = account.name?.trim() || email;
 
-    const syncedUser = {
-      id: account.localAccountId,
-      name: account.name,
-      email,
-      role: existingUser?.role || "user",
-    };
+      if (!entraId || !email) {
+        console.error("Microsoft account did not return the required identity values.");
+        return;
+      }
 
-    try {
-      await api.upsertUserRow(syncedUser);
-
-      if (cancelled) return;
-
-      setSessionUser(syncedUser);
-
-      setUsers((prev) => {
-        const existing = prev.find(
-          (u) =>
-            u.id === syncedUser.id ||
-            u.email?.toLowerCase() === email
-        );
-
-        if (!existing) {
-          return [...prev, syncedUser];
-        }
-
-        return prev.map((u) =>
-          u.id === existing.id
-            ? syncedUser
-            : u
-        );
-      });
-    } catch (error) {
-      console.error(
-        "Failed to sync Microsoft user:",
-        error
+      const existingUser = users.find(
+        (user) =>
+          user.entraId === entraId ||
+          user.email?.trim().toLowerCase() === email
       );
+
+      const syncedUser = {
+        id: existingUser?.id || crypto.randomUUID(),
+        entraId,
+        name,
+        email,
+        role: existingUser?.role || "user",
+      };
+
+      try {
+        await api.upsertUserRow(syncedUser);
+        if (cancelled) return;
+
+        setSessionUser(syncedUser);
+        setUsers((previousUsers) => {
+          const index = previousUsers.findIndex(
+            (user) =>
+              user.id === syncedUser.id ||
+              user.entraId === entraId ||
+              user.email?.trim().toLowerCase() === email
+          );
+
+          if (index === -1) return [...previousUsers, syncedUser];
+
+          return previousUsers.map((user, userIndex) =>
+            userIndex === index ? { ...user, ...syncedUser } : user
+          );
+        });
+      } catch (error) {
+        console.error("Failed to sync Microsoft user:", error);
+        if (!cancelled) {
+          setLoadError(
+            "Microsoft sign-in succeeded, but the user account could not be synchronised."
+          );
+        }
+      }
     }
-  }
 
-  syncMicrosoftUser();
-
-  return () => {
-    cancelled = true;
-  };
-}, [instance, isAuthenticated, users]);
+    syncMicrosoftUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [instance, isAuthenticated, loaded]);
 
   useEffect(() => {
     if (groups.length === 0) {
@@ -591,7 +595,7 @@ export default function ResourceBookingApp() {
     const name = newUserName.trim();
     if (!name) { setUserPanelError("Enter a name."); return; }
     if (users.some((u) => u.name.toLowerCase() === name.toLowerCase())) { setUserPanelError("A user with that name already exists."); return; }
-    const nu = { id: uid(), name, role: newUserRole };
+    const nu = { id: crypto.randomUUID(), entraId: null, name, email: null, role: newUserRole };
     setUsers((prev) => [...prev, nu]);
     runPersist(() => api.upsertUserRow(nu));
     setNewUserName("");
@@ -698,18 +702,6 @@ export default function ResourceBookingApp() {
     );
   }
 
-  if (groups.length === 0 && users.length === 0) {
-    return (
-      <div style={{ fontFamily: "'Inter', sans-serif", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.page, boxSizing: "border-box" }}>
-        <style>{FONT_IMPORT}</style>
-        <div style={{ width: 440, maxWidth: "100%", textAlign: "center" }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: C.ink }}>Resource Booking has no setup data</div>
-          <div style={{ marginTop: 8, color: C.inkSoft, fontSize: 13, lineHeight: 1.6 }}>Supabase connected successfully, but no resource groups or application users were returned.</div>
-        </div>
-      </div>
-    );
-  }
-
   if (!sessionUser) {
     return (
       <div style={{ fontFamily: "'Inter', sans-serif", background: C.page, minHeight: 460, borderRadius: 10, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -720,7 +712,6 @@ export default function ResourceBookingApp() {
             <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 3 }}>Sign in to view the booking calendar</div>
           </div>
           <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-            <label style={labelStyle()}>Name</label>
             <button
               onClick={signIn}
               style={{
@@ -744,6 +735,19 @@ export default function ResourceBookingApp() {
       </div>
     );
   }
+
+  if (groups.length === 0 && users.length === 0) {
+    return (
+      <div style={{ fontFamily: "'Inter', sans-serif", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.page, boxSizing: "border-box" }}>
+        <style>{FONT_IMPORT}</style>
+        <div style={{ width: 440, maxWidth: "100%", textAlign: "center" }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.ink }}>Resource Booking has no setup data</div>
+          <div style={{ marginTop: 8, color: C.inkSoft, fontSize: 13, lineHeight: 1.6 }}>Supabase connected successfully, but no resource groups or application users were returned.</div>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", background: C.page, color: C.ink, minHeight: "100vh", height: "100vh", borderRadius: 10, overflow: "hidden", position: "relative", border: `1px solid ${C.border}` }}>
