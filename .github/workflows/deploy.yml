@@ -30,6 +30,8 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_ENTRA_CLIENT_ID: ${{ secrets.VITE_ENTRA_CLIENT_ID }}
           VITE_ENTRA_TENANT_ID: ${{ secrets.VITE_ENTRA_TENANT_ID }}
+          VITE_BOOKING_ACCESS_GROUPS: ${{ secrets.VITE_BOOKING_ACCESS_GROUPS }}
+          VITE_BOOKING_ADMIN_GROUPS: ${{ secrets.VITE_BOOKING_ADMIN_GROUPS }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
