@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronLeft, ChevronRight, Search, RotateCcw, CalendarPlus, ChevronDown, ChevronUp,
-  Info, X, Trash2, Plus, Loader2, ShieldCheck, LogOut, Settings, Clock, Upload, ArrowUp, ArrowDown, Boxes,
+  Info, X, Trash2, Plus, Loader2, ShieldCheck, LogOut, Clock, Upload, ArrowUp, ArrowDown, Boxes,
   Bell, Inbox, Check, Repeat as RepeatIcon,
 } from "lucide-react";
 import * as api from "./lib/api";
@@ -78,25 +78,6 @@ function getGroupList(envValue) {
     .split(",")
     .map((g) => g.trim())
     .filter(Boolean);
-}
-
-function parseCsvUsers(text, existingUsers) {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const added = [];
-  const skipped = [];
-  const seen = new Set(existingUsers.map((u) => u.name.toLowerCase()));
-  for (const line of lines) {
-    const cols = line.split(",").map((c) => c.trim());
-    if (cols[0].toLowerCase() === "name" && (cols[1] || "").toLowerCase() === "role") continue;
-    const name = cols[0];
-    if (!name) continue;
-    let role = (cols[1] || "user").toLowerCase();
-    role = role === "admin" ? "admin" : "user";
-    if (seen.has(name.toLowerCase())) { skipped.push(name); continue; }
-    seen.add(name.toLowerCase());
-    added.push({ id: crypto.randomUUID(), entraId: null, name, email: null, role });
-  }
-  return { added, skipped };
 }
 
 function Modal({ children, onClose, title, width = 400 }) {
@@ -180,12 +161,6 @@ export default function ResourceBookingApp() {
   const [newGroupName, setNewGroupName] = useState("");
   const [resourcePanelError, setResourcePanelError] = useState("");
   const [saveState, setSaveState] = useState("idle");
-  const [newUserName, setNewUserName] = useState("");
-  const [newUserRole, setNewUserRole] = useState("user");
-  const [userPanelError, setUserPanelError] = useState("");
-  const [csvText, setCsvText] = useState("");
-  const [csvResult, setCsvResult] = useState(null);
-  const fileInputRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -362,7 +337,6 @@ const isAdmin =
 
   const dateKey = toISODate(selectedDate);
   const isAdmin = sessionUser?.role === "admin";
-  const adminCount = users.filter((u) => u.role === "admin").length;
   const pendingBookings = bookings.filter((b) => b.status === "pending").sort((a, b) => (a.date + (a.periodId || "")).localeCompare(b.date + (b.periodId || "")));
   const myNotifications = sessionUser ? notifications.filter((n) => n.userId === sessionUser.id) : [];
 
@@ -633,49 +607,6 @@ const isAdmin =
     setResourcePanelError("");
   }
 
-  function addUserFromPanel() {
-    const name = newUserName.trim();
-    if (!name) { setUserPanelError("Enter a name."); return; }
-    if (users.some((u) => u.name.toLowerCase() === name.toLowerCase())) { setUserPanelError("A user with that name already exists."); return; }
-    const nu = { id: crypto.randomUUID(), entraId: null, name, email: null, role: newUserRole };
-    setUsers((prev) => [...prev, nu]);
-    runPersist(() => api.upsertUserRow(nu));
-    setNewUserName("");
-    setUserPanelError("");
-  }
-  function toggleUserRole(u) {
-    if (u.role === "admin" && adminCount <= 1) { setUserPanelError("At least one admin must remain."); return; }
-    const updated = { ...u, role: u.role === "admin" ? "user" : "admin" };
-    setUsers((prev) => prev.map((x) => x.id === u.id ? updated : x));
-    runPersist(() => api.upsertUserRow(updated));
-    setUserPanelError("");
-  }
-  function removeUser(u) {
-    if (u.role === "admin" && adminCount <= 1) { setUserPanelError("At least one admin must remain."); return; }
-    if (u.id === sessionUser.id) { setUserPanelError("You can't remove your own account while signed in."); return; }
-    setUsers((prev) => prev.filter((x) => x.id !== u.id));
-    runPersist(() => api.deleteUserRow(u.id));
-  }
-  function handleCsvFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setCsvText(String(reader.result || ""));
-    reader.readAsText(file);
-    e.target.value = "";
-  }
-  function importCsv() {
-    if (!csvText.trim()) { setUserPanelError("Paste or upload CSV data first."); return; }
-    const { added, skipped } = parseCsvUsers(csvText, users);
-    if (added.length) {
-      setUsers((prev) => [...prev, ...added]);
-      runPersist(() => Promise.all(added.map((u) => api.upsertUserRow(u))));
-    }
-    setCsvResult({ added: added.length, skipped: skipped.length });
-    setUserPanelError("");
-    setCsvText("");
-  }
-
   function updateGroupPeriods(groupId, updater) {
     setPeriodsByGroup((prev) => {
       const next = updater(prev[groupId] || []);
@@ -770,7 +701,7 @@ const isAdmin =
               Sign in with Microsoft 365
             </button>
             <div style={{ fontSize: 10.5, color: C.inkSoft, marginTop: 10, lineHeight: 1.5 }}>
-              Don't have an account? Ask an admin to add you.
+              Contact IT if you require access.
             </div>
           </div>
         </div>
@@ -778,7 +709,7 @@ const isAdmin =
     );
   }
 
-  if (groups.length === 0 && users.length === 0) {
+  if (groups.length === 0) {
     return (
       <div style={{ fontFamily: "'Inter', sans-serif", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: C.page, boxSizing: "border-box" }}>
         <style>{FONT_IMPORT}</style>
@@ -808,9 +739,6 @@ const isAdmin =
               </button>
               <button onClick={() => { setResourcePanelError(""); setModal({ mode: "resources" }); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "7px 10px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", color: C.ink }}>
                 <Boxes size={13} /> Manage resources
-              </button>
-              <button onClick={() => { setUserPanelError(""); setCsvResult(null); setModal({ mode: "users" }); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "7px 10px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", color: C.ink }}>
-                <Settings size={13} /> Manage users
               </button>
               <button onClick={() => setModal({ mode: "approvals" })} style={{ position: "relative", display: "flex", alignItems: "center", gap: 6, background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "7px 10px", fontSize: 12.5, fontWeight: 500, cursor: "pointer", color: C.ink }}>
                 <Inbox size={13} /> Approvals
@@ -1251,25 +1179,6 @@ const isAdmin =
           </Modal>
         );
       })()}
-
-      {modal?.mode === "users" && isAdmin && (
-        <Modal onClose={closeModal} title="Manage users" width={420}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {users.map((u) => (
-              <div key={u.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", border: `1px solid ${C.border}`, borderRadius: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{u.name}</span>
-                  {u.id === sessionUser.id && <span style={{ fontSize: 10.5, color: C.inkSoft }}>(you)</span>}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {roleBadge(u.role)}
-                  <button onClick={() => toggleUserRole(u)} style={{ fontSize: 11, background: "none", border: `1px solid ${C.border}`, borderRadius: 5, padding: "4px 8px", cursor: "pointer", color: C.ink }}>
-                    {u.role === "admin" ? "Make member" : "Make admin"}
-                  </button>
-                  <button aria-label={`Remove ${u.name}`} onClick={() => removeUser(u)} style={{ background: "none", border: "none", cursor: "pointer", color: C.inkSoft, padding: 4 }}><Trash2 size={13} /></button>
-                </div>
-              </div>
-            ))}
 
             <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, marginTop: 4 }}>
               <label style={labelStyle()}>Add one user</label>
