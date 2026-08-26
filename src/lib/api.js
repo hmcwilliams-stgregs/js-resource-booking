@@ -1,18 +1,16 @@
 import { supabase } from "./supabaseClient";
 
 /* ------------------------------------------------------------------ *
- * This file is the only place that talks to Supabase. App.jsx keeps
- * using the same camelCase shapes it always did (resources, groups,
- * periodsByGroup, bookings, users, notifications) — these functions
- * translate to/from the snake_case table columns in supabase/schema.sql.
+ * Supabase data access layer.
+ * Translates DB snake_case <-> App camelCase.
  * ------------------------------------------------------------------ */
 
-function throwIfError({ error }) {
-  if (error) throw error;
+function throwIfError(result) {
+  if (result?.error) throw result.error;
+  return result?.data;
 }
 
 // ---------- Load everything on startup ----------
-
 export async function loadAll() {
   const [groupsRes, resourcesRes, periodsRes, usersRes, bookingsRes, notificationsRes] =
     await Promise.all([
@@ -26,9 +24,9 @@ export async function loadAll() {
 
   [groupsRes, resourcesRes, periodsRes, usersRes, bookingsRes, notificationsRes].forEach(throwIfError);
 
-  const groups = groupsRes.data.map((g) => ({ id: g.id, name: g.name }));
+  const groups = (groupsRes.data || []).map((g) => ({ id: g.id, name: g.name }));
 
-  const resources = resourcesRes.data.map((r) => ({
+  const resources = (resourcesRes.data || []).map((r) => ({
     id: r.id,
     name: r.name,
     groupId: r.group_id,
@@ -38,21 +36,31 @@ export async function loadAll() {
   }));
 
   const periodsByGroup = {};
-  for (const p of periodsRes.data) {
-    const period = { id: p.id, label: p.label, type: p.type, start: p.start_time, end: p.end_time };
-    if (!periodsByGroup[p.group_id]) periodsByGroup[p.group_id] = [];
+  for (const p of periodsRes.data || []) {
+    const period = {
+      id: p.id,
+      label: p.label,
+      type: p.type,
+      start: p.start_time,
+      end: p.end_time,
+    };
+
+    if (!periodsByGroup[p.group_id]) {
+      periodsByGroup[p.group_id] = [];
+    }
+
     periodsByGroup[p.group_id].push(period);
   }
 
-   const users = usersRes.data.map((u) => ({
-  id: u.id,
-  entraId: u.entra_id,
-  name: u.name,
-  email: u.email,
-  role: u.role,
-}));
+  const users = (usersRes.data || []).map((u) => ({
+    id: u.id,
+    entraId: u.entra_id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+  }));
 
-  const bookings = bookingsRes.data.map((b) => ({
+  const bookings = (bookingsRes.data || []).map((b) => ({
     id: b.id,
     resourceId: b.resource_id,
     periodId: b.period_id,
@@ -66,7 +74,7 @@ export async function loadAll() {
     groupId: b.group_id,
   }));
 
-  const notifications = notificationsRes.data.map((n) => ({
+  const notifications = (notificationsRes.data || []).map((n) => ({
     id: n.id,
     userId: n.user_id,
     type: n.type,
@@ -78,145 +86,162 @@ export async function loadAll() {
 }
 
 // ---------- Groups ----------
-
 export async function upsertGroup(group) {
   return throwIfError(await supabase.from("groups").upsert({ id: group.id, name: group.name }));
 }
+
 export async function deleteGroupRow(id) {
   return throwIfError(await supabase.from("groups").delete().eq("id", id));
 }
 
 // ---------- Resources ----------
-
-export async function upsertResource(r) {
+export async function upsertResource(resource) {
   return throwIfError(
     await supabase.from("resources").upsert({
-      id: r.id,
-      name: r.name,
-      group_id: r.groupId,
-      slots: r.slots,
-      capacity: r.capacity,
-      requires_approval: r.requiresApproval,
+      id: resource.id,
+      name: resource.name,
+      group_id: resource.groupId,
+      slots: resource.slots,
+      capacity: resource.capacity,
+      requires_approval: resource.requiresApproval,
     })
   );
 }
+
 export async function deleteResourceRow(id) {
   return throwIfError(await supabase.from("resources").delete().eq("id", id));
 }
 
-// ---------- Periods (a group's whole timetable is replaced on each edit —
-// simplest correct way to handle reordering/insert/remove without diffing) ----------
-
+// ---------- Periods ----------
 export async function replaceGroupPeriods(groupId, periods) {
-  const del = await supabase.from("periods").delete().eq("group_id", groupId);
-  throwIfError(del);
-  if (periods.length === 0) return;
-  const rows = periods.map((p, i) => ({
+  throwIfError(await supabase.from("periods").delete().eq("group_id", groupId));
+
+  if (!periods.length) return;
+
+  const rows = periods.map((p, index) => ({
     id: p.id,
     group_id: groupId,
     label: p.label,
     type: p.type,
     start_time: p.start,
     end_time: p.end,
-    sort_order: i,
+    sort_order: index,
   }));
-  throwIfError(await supabase.from("periods").insert(rows));
+
+  return throwIfError(await supabase.from("periods").insert(rows));
 }
+
 export async function deletePeriodsForGroup(groupId) {
   return throwIfError(await supabase.from("periods").delete().eq("group_id", groupId));
 }
 
-// ---------- Timetable Template ----------
-
+// ---------- Timetable Templates ----------
 export async function loadTemplates() {
-  const { data, error } =
-    await supabase
-      .from("timetable_templates")
-      .select("*")
-      .order("name");
+  const { data, error } = await supabase
+    .from("timetable_templates")
+    .select("*")
+    .order("name");
 
-  if (error) throw error;
+  if (error) {
+    console.warn("loadTemplates:", error);
+    return [];
+  }
 
-  return data.map((t) => ({
+  return (data || []).map((t) => ({
     id: t.id,
     name: t.name,
     blocks: t.blocks || [],
   }));
 }
 
-export async function upsertTemplate(
-  template
-) {
-  const { error } =
-    await supabase
-      .from("timetable_templates")
-      .upsert({
-        id: template.id,
-        name: template.name,
-        blocks: template.blocks,
-      });
+export async function getTemplate(id) {
+  const { data, error } = await supabase
+    .from("timetable_templates")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertTemplate(template) {
+  const { error } = await supabase.from("timetable_templates").upsert(
+    {
+      id: template.id,
+      name: template.name,
+      blocks: template.blocks,
+    },
+    {
+      onConflict: "id",
+    }
+  );
 
   if (error) throw error;
 }
 
-export async function deleteTemplate(
-  id
-) {
-  const { error } =
-    await supabase
-      .from("timetable_templates")
-      .delete()
-      .eq("id", id);
-
+export async function deleteTemplate(id) {
+  const { error } = await supabase.from("timetable_templates").delete().eq("id", id);
   if (error) throw error;
 }
 
 // ---------- Terms ----------
-
 export async function loadTerms() {
-  const { data, error } =
-    await supabase
-      .from("term_dates")
-      .select("*")
-      .order("id");
+  const { data, error } = await supabase
+    .from("term_dates")
+    .select("*")
+    .order("id");
+
+  if (error) {
+    console.warn("loadTerms:", error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getTerm(id) {
+  const { data, error } = await supabase
+    .from("term_dates")
+    .select("*")
+    .eq("id", id)
+    .single();
 
   if (error) throw error;
-
   return data;
 }
 
 export async function upsertTerm(term) {
-  const { error } =
-    await supabase
-      .from("term_dates")
-      .upsert({
-        id: term.id,
-        name: term.name,
-        start_date: term.start,
-        end_date: term.end,
-      });
+  const { error } = await supabase.from("term_dates").upsert(
+    {
+      id: term.id,
+      name: term.name,
+      start_date: term.start || null,
+      end_date: term.end || null,
+    },
+    {
+      onConflict: "id",
+    }
+  );
 
   if (error) throw error;
 }
 
 // ---------- Users ----------
-
-export async function upsertUserRow(u) {
+export async function upsertUserRow(user) {
   return throwIfError(
-    await supabase
-      .from("app_users")
-      .upsert(
-        {
-          id: u.id,
-          entra_id: u.entraId || null,
-          name: u.name,
-          email: u.email || null,
-          role: u.role,
-        },
-        {
-          onConflict: "id",
-        }
-      )
+    await supabase.from("app_users").upsert(
+      {
+        id: user.id,
+        entra_id: user.entraId || null,
+        name: user.name,
+        email: user.email || null,
+        role: user.role,
+      },
+      {
+        onConflict: "entra_id",
+      }
+    )
   );
 }
 
@@ -225,78 +250,88 @@ export async function deleteUserRow(id) {
 }
 
 // ---------- Bookings ----------
-
-function toBookingRow(b) {
+function toBookingRow(booking) {
   return {
-    id: b.id,
-    resource_id: b.resourceId,
-    period_id: b.periodId,
-    all_day: b.allDay,
-    date: b.date,
-    title: b.title,
-    booked_by_id: b.bookedById,
-    booked_by: b.bookedBy,
-    status: b.status,
-    recurrence_id: b.recurrenceId,
-    group_id: b.groupId,
+    id: booking.id,
+    resource_id: booking.resourceId,
+    period_id: booking.periodId,
+    all_day: booking.allDay,
+    date: booking.date,
+    title: booking.title,
+    booked_by_id: booking.bookedById,
+    booked_by: booking.bookedBy,
+    status: booking.status,
+    recurrence_id: booking.recurrenceId,
+    group_id: booking.groupId,
   };
 }
 
-export async function insertBookings(bookingsArr) {
-  if (bookingsArr.length === 0) return;
-  return throwIfError(await supabase.from("bookings").insert(bookingsArr.map(toBookingRow)));
+export async function insertBookings(bookings) {
+  if (!bookings.length) return;
+  return throwIfError(await supabase.from("bookings").insert(bookings.map(toBookingRow)));
 }
+
 export async function updateBookingStatusRow(id, status) {
   return throwIfError(await supabase.from("bookings").update({ status }).eq("id", id));
 }
+
 export async function updateBookingStatusForRecurrence(recurrenceId, status) {
   return throwIfError(
-    await supabase.from("bookings").update({ status }).eq("recurrence_id", recurrenceId).eq("status", "pending")
+    await supabase.from("bookings")
+      .update({ status })
+      .eq("recurrence_id", recurrenceId)
+      .eq("status", "pending")
   );
 }
+
 export async function deleteBookingRow(id) {
   return throwIfError(await supabase.from("bookings").delete().eq("id", id));
 }
+
 export async function deleteBookingsByRecurrenceRow(recurrenceId) {
   return throwIfError(await supabase.from("bookings").delete().eq("recurrence_id", recurrenceId));
 }
+
 export async function deletePendingByRecurrenceRow(recurrenceId) {
   return throwIfError(
-    await supabase.from("bookings").delete().eq("recurrence_id", recurrenceId).eq("status", "pending")
+    await supabase.from("bookings")
+      .delete()
+      .eq("recurrence_id", recurrenceId)
+      .eq("status", "pending")
   );
 }
+
 export async function deleteBookingsByResourceRow(resourceId) {
   return throwIfError(await supabase.from("bookings").delete().eq("resource_id", resourceId));
 }
+
 export async function deleteBookingsByPeriodRow(periodId) {
   return throwIfError(await supabase.from("bookings").delete().eq("period_id", periodId));
 }
 
 // ---------- Notifications ----------
-
-export async function insertNotificationRow(n) {
+export async function insertNotificationRow(notification) {
   return throwIfError(
-    await supabase.from("notifications").insert({
-      id: n.id,
-      user_id: n.userId,
-      type: n.type,
-      message: n.message,
-    })
+    await supabase.from("notifications").insert([
+      {
+        id: notification.id,
+        user_id: notification.userId,
+        type: notification.type,
+        message: notification.message,
+      },
+    ])
   );
 }
+
 export async function deleteNotificationRow(id) {
   return throwIfError(await supabase.from("notifications").delete().eq("id", id));
 }
+
 export async function deleteNotificationsByUserRow(userId) {
   return throwIfError(await supabase.from("notifications").delete().eq("user_id", userId));
 }
 
-// ---------- Audit log ----------
-// Call this alongside the booking mutation functions above whenever a
-// booking is created, approved, rejected, or cancelled. This table is
-// append-only — it's your history of who did what, independent of the
-// current state of the `bookings` table.
-
+// ---------- Audit Log ----------
 export async function logEvent(bookingId, action, actor, actorId, details) {
   const { error } = await supabase.from("booking_events").insert({
     booking_id: bookingId,
@@ -305,5 +340,8 @@ export async function logEvent(bookingId, action, actor, actorId, details) {
     actor_id: actorId || null,
     details: details || null,
   });
-  if (error) console.error("Failed to write booking_events log entry:", error);
+
+  if (error) {
+    console.error("Failed to write booking_events log entry:", error);
+  }
 }
