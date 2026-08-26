@@ -126,6 +126,51 @@ export async function deletePeriodsForGroup(groupId) {
   return throwIfError(await supabase.from("periods").delete().eq("group_id", groupId));
 }
 
+// ---------- Timetable Template ----------
+
+export async function loadTemplates() {
+  const { data, error } =
+    await supabase
+      .from("timetable_templates")
+      .select("*")
+      .order("name");
+
+  if (error) throw error;
+
+  return data.map((t) => ({
+    id: t.id,
+    name: t.name,
+    blocks: t.blocks || [],
+  }));
+}
+
+export async function upsertTemplate(
+  template
+) {
+  const { error } =
+    await supabase
+      .from("timetable_templates")
+      .upsert({
+        id: template.id,
+        name: template.name,
+        blocks: template.blocks,
+      });
+
+  if (error) throw error;
+}
+
+export async function deleteTemplate(
+  id
+) {
+  const { error } =
+    await supabase
+      .from("timetable_templates")
+      .delete()
+      .eq("id", id);
+
+  if (error) throw error;
+}
+
 // ---------- Terms ----------
 
 export async function loadTerms() {
