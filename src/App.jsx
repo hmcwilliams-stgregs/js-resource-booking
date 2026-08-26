@@ -132,7 +132,16 @@ export default function ResourceBookingApp() {
       if (!allowed) { setLoadError("You do not have permission to access Resource Booking."); return; }
       if (!entraId || !email) return;
       const existing = users.find((user) => user.entraId === entraId || user.email?.toLowerCase() === email);
-      const synced = { id: existing?.id || uid(), entraId, name, email, role: admin ? "admin" : "user" };
+      const synced = {
+  id: existing?.id || uid(),
+  entraId,
+  name,
+  email,
+  role:
+    admin
+      ? "admin"
+      : (existing?.role || "user")
+};
       try {
         await api.upsertUserRow(synced); if (cancelled) return;
         setSessionUser(synced);
