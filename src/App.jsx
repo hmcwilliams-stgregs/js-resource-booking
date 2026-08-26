@@ -221,6 +221,7 @@ export default function ResourceBookingApp() {
       setLoadError("");
       try {
         const data = await api.loadAll();
+        const termData = await api.loadTerms();
         if (cancelled) return;
 
         const loadedGroups = data.groups ?? [];
@@ -231,6 +232,14 @@ export default function ResourceBookingApp() {
         setPeriodsByGroup(data.periodsByGroup ?? {});
         setUsers(data.users ?? []);
         setNotifications(data.notifications ?? []);
+        setTerms(
+          termData.map((t) => ({
+            id: t.id,
+            name: t.name,
+            start: t.start_date,
+            end: t.end_date,
+          }))
+        );
         setActiveGroupId(firstGroupId);
         setEditingGroupId(firstGroupId);
         setNewResourceGroupId(firstGroupId);
@@ -783,18 +792,28 @@ if (repeat === "none") {
   }
 
   function updateTerm(id, field, value) {
-  setTerms((prev) =>
-    prev.map((term) =>
+  setTerms((prev) => {
+    const updated = prev.map((term) =>
       term.id === id
         ? {
             ...term,
             [field]: value,
           }
         : term
-    )
-  );
+    );
 
-  // TODO - persist to Supabase later
+    const changed = updated.find(
+      (term) => term.id === id
+    );
+
+    if (changed) {
+      runPersist(() =>
+        api.upsertTerm(changed)
+      );
+    }
+
+    return updated;
+  });
 }
 
   const canCancel = (b) => isAdmin || b.bookedById === sessionUser?.id;
@@ -1342,12 +1361,20 @@ if (repeat === "none") {
     ({formatDateShort(currentTerm.end)})
   </div>
 )}
-                {form.repeat && form.repeat !== "none" && (
-                  <div style={{ fontSize: 11, color: C.inkSoft }}>
-                    <RepeatIcon size={11} style={{ verticalAlign: -1, marginRight: 4 }} />
-                    Creates {Math.min(52, Math.max(2, Number(form.occurrences) || 2))} bookings, one every {form.repeat === "weekly" ? "week" : "day"}, starting {formatDate(selectedDate)}.
-                  </div>
-                )}
+                {form.repeat !== "none" && (
+  <div style={{ fontSize: 11, color: C.inkSoft }}>
+    <RepeatIcon
+      size={11}
+      style={{
+        verticalAlign: -1,
+        marginRight: 4,
+      }}
+    />
+    Recurring booking starting
+    {" "}
+    {formatDate(selectedDate)}
+  </div>
+)}
                 <div style={{ fontSize: 12, color: C.inkSoft }}>
                   Booking as {sessionUser.name} · {formatDate(selectedDate)}
                 </div>
