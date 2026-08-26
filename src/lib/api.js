@@ -126,6 +126,34 @@ export async function deletePeriodsForGroup(groupId) {
   return throwIfError(await supabase.from("periods").delete().eq("group_id", groupId));
 }
 
+// ---------- Terms ----------
+
+export async function loadTerms() {
+  const { data, error } =
+    await supabase
+      .from("term_dates")
+      .select("*")
+      .order("id");
+
+  if (error) throw error;
+
+  return data;
+}
+
+export async function upsertTerm(term) {
+  const { error } =
+    await supabase
+      .from("term_dates")
+      .upsert({
+        id: term.id,
+        name: term.name,
+        start_date: term.start,
+        end_date: term.end,
+      });
+
+  if (error) throw error;
+}
+
 // ---------- Users ----------
 
 export async function upsertUserRow(u) {
