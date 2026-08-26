@@ -239,7 +239,7 @@ export async function upsertUserRow(user) {
         role: user.role,
       },
       {
-        onConflict: "entra_id",
+        onConflict: "id",
       }
     )
   );
