@@ -222,6 +222,17 @@ export default function ResourceBookingApp() {
       try {
         const data = await api.loadAll();
         const termData = await api.loadTerms();
+
+        if (termData?.length) {
+          setTerms(
+            termData.map((t) => ({
+              id: t.id,
+              name: t.name,
+              start: t.start_date || "",
+              end: t.end_date || "",
+            }))
+          );
+        }
         if (cancelled) return;
 
         const loadedGroups = data.groups ?? [];
@@ -232,14 +243,6 @@ export default function ResourceBookingApp() {
         setPeriodsByGroup(data.periodsByGroup ?? {});
         setUsers(data.users ?? []);
         setNotifications(data.notifications ?? []);
-        setTerms(
-          termData.map((t) => ({
-            id: t.id,
-            name: t.name,
-            start: t.start_date,
-            end: t.end_date,
-          }))
-        );
         setActiveGroupId(firstGroupId);
         setEditingGroupId(firstGroupId);
         setNewResourceGroupId(firstGroupId);
