@@ -1863,13 +1863,18 @@ function generateTimetable() {
   </div>
 
   <div
-    style={{
-      display: "grid",
-      gridTemplateColumns:
-        "repeat(4,1fr)",
-      gap: 8,
-    }}
-  >
+  style={{
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(4, 1fr)",
+    gap: 8,
+  }}
+>
+  <div>
+    <label style={labelStyle()}>
+      Start Time
+    </label>
+
     <input
       type="time"
       value={generatorStartTime}
@@ -1880,6 +1885,12 @@ function generateTimetable() {
       }
       style={fieldStyle()}
     />
+  </div>
+
+  <div>
+    <label style={labelStyle()}>
+      Number of Periods
+    </label>
 
     <input
       type="number"
@@ -1891,6 +1902,12 @@ function generateTimetable() {
       }
       style={fieldStyle()}
     />
+  </div>
+
+  <div>
+    <label style={labelStyle()}>
+      Period Length (mins)
+    </label>
 
     <input
       type="number"
@@ -1902,6 +1919,12 @@ function generateTimetable() {
       }
       style={fieldStyle()}
     />
+  </div>
+
+  <div>
+    <label style={labelStyle()}>
+      Recess Length (mins)
+    </label>
 
     <input
       type="number"
@@ -1914,6 +1937,7 @@ function generateTimetable() {
       style={fieldStyle()}
     />
   </div>
+</div>
 
   <label
     style={{
