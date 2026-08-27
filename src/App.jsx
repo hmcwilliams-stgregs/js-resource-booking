@@ -184,6 +184,16 @@ export default function ResourceBookingApp() {
   const [resourcePanelError, setResourcePanelError] = useState("");
   const [saveState, setSaveState] = useState("idle");
 
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [newTemplateName, setNewTemplateName] = useState("");
+  
+  const [generatorStartTime, setGeneratorStartTime] = useState("08:40");
+  const [generatorBlockLength, setGeneratorBlockLength] = useState(50);
+  const [generatorBreakLength, setGeneratorBreakLength] = useState(20);
+  const [generatorPeriods, setGeneratorPeriods] = useState(6);
+  const [autoInsertBreaks, setAutoInsertBreaks] = useState(true);
+
   const fileInputRef = useRef(null);
   const datePickerRef = useRef(null);
 
@@ -220,8 +230,12 @@ export default function ResourceBookingApp() {
     async function load() {
       setLoadError("");
       try {
-        const data = await api.loadAll();
-        const termData = await api.loadTerms();
+        const [data, termData, templateData] =
+          await Promise.all([
+            api.loadAll(),
+            api.loadTerms(),
+            api.loadTemplates(),
+          ]);
 
         if (termData?.length) {
           setTerms(
@@ -243,6 +257,7 @@ export default function ResourceBookingApp() {
         setPeriodsByGroup(data.periodsByGroup ?? {});
         setUsers(data.users ?? []);
         setNotifications(data.notifications ?? []);
+        setTemplates(templateData ?? []);
         setActiveGroupId(firstGroupId);
         setEditingGroupId(firstGroupId);
         setNewResourceGroupId(firstGroupId);
@@ -819,6 +834,195 @@ if (repeat === "none") {
   });
 }
 
+function saveCurrentAsTemplate() {
+  const name = newTemplateName.trim();
+
+  if (!name) {
+    setResourcePanelError("Enter a template name.");
+    return;
+  }
+
+  const currentPeriods =
+    periodsFor(editingGroupId);
+
+  if (!currentPeriods.length) {
+    setResourcePanelError(
+      "Add at least one timetable block before saving."
+    );
+    return;
+  }
+
+  const template = {
+    id: uid(),
+    name,
+    blocks: currentPeriods.map(
+      ({ label, type, start, end }) => ({
+        label,
+        type,
+        start,
+        end,
+      })
+    ),
+  };
+
+  setTemplates((prev) => [
+    ...prev,
+    template,
+  ]);
+
+  runPersist(() =>
+    api.upsertTemplate(template)
+  );
+
+  setSelectedTemplateId(template.id);
+  setNewTemplateName("");
+}
+
+function applyTemplate(id) {
+  const template =
+    templates.find(
+      (t) => t.id === id
+    );
+
+  if (!template) return;
+
+  updateGroupPeriods(
+    editingGroupId,
+    () =>
+      template.blocks.map(
+        (block) => ({
+          ...block,
+          id: uid(),
+        })
+      )
+  );
+}
+
+function deleteTemplate(id) {
+  if (!id) return;
+
+  if (
+    !window.confirm(
+      "Delete this template?"
+    )
+  ) {
+    return;
+  }
+
+  setTemplates((prev) =>
+    prev.filter(
+      (t) => t.id !== id
+    )
+  );
+
+  runPersist(() =>
+    api.deleteTemplate(id)
+  );
+
+  setSelectedTemplateId("");
+}
+
+function formatGeneratorTime(date) {
+  return `${String(
+    date.getHours()
+  ).padStart(2, "0")}:${String(
+    date.getMinutes()
+  ).padStart(2, "0")}`;
+}
+
+function generateTimetable() {
+  let current =
+    new Date(
+      `2000-01-01T${generatorStartTime}:00`
+    );
+
+  const blocks = [];
+
+  for (
+    let i = 1;
+    i <= generatorPeriods;
+    i++
+  ) {
+    const end =
+      new Date(current);
+
+    end.setMinutes(
+      end.getMinutes() +
+        generatorBlockLength
+    );
+
+    blocks.push({
+      id: uid(),
+      label: `Period ${i}`,
+      type: "period",
+      start: formatGeneratorTime(
+        current
+      ),
+      end: formatGeneratorTime(end),
+    });
+
+    current = end;
+
+    if (
+      autoInsertBreaks &&
+      i === 2
+    ) {
+      const recessEnd =
+        new Date(current);
+
+      recessEnd.setMinutes(
+        recessEnd.getMinutes() +
+          generatorBreakLength
+      );
+
+      blocks.push({
+        id: uid(),
+        label: "Recess",
+        type: "break",
+        start:
+          formatGeneratorTime(current),
+        end:
+          formatGeneratorTime(
+            recessEnd
+          ),
+      });
+
+      current = recessEnd;
+    }
+
+    if (
+      autoInsertBreaks &&
+      i === 4
+    ) {
+      const lunchEnd =
+        new Date(current);
+
+      lunchEnd.setMinutes(
+        lunchEnd.getMinutes() + 40
+      );
+
+      blocks.push({
+        id: uid(),
+        label: "Lunch",
+        type: "break",
+        start:
+          formatGeneratorTime(current),
+        end:
+          formatGeneratorTime(
+            lunchEnd
+          ),
+      });
+
+      current = lunchEnd;
+    }
+  }
+
+  updateGroupPeriods(
+    editingGroupId,
+    () => blocks
+  );
+}
+  
   const canCancel = (b) => isAdmin || b.bookedById === sessionUser?.id;
   const detailed = viewMode === "Detailed";
   const rowH =
@@ -1545,6 +1749,202 @@ if (repeat === "none") {
                   {editPeriods.length} block{editPeriods.length === 1 ? "" : "s"}
                 </div>
               </div>
+
+              <div
+  style={{
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: 12,
+  }}
+>
+  <div
+    style={{
+      fontWeight: 600,
+      marginBottom: 10,
+    }}
+  >
+    Timetable Templates
+  </div>
+
+  <select
+    value={selectedTemplateId}
+    onChange={(e) =>
+      setSelectedTemplateId(
+        e.target.value
+      )
+    }
+    style={fieldStyle()}
+  >
+    <option value="">
+      Select Template
+    </option>
+
+    {templates.map((template) => (
+      <option
+        key={template.id}
+        value={template.id}
+      >
+        {template.name}
+      </option>
+    ))}
+  </select>
+
+  <div
+    style={{
+      display: "flex",
+      gap: 8,
+      marginTop: 8,
+    }}
+  >
+    <button
+      onClick={() =>
+        applyTemplate(
+          selectedTemplateId
+        )
+      }
+      style={toolBtn()}
+    >
+      Apply
+    </button>
+
+    <button
+      onClick={() =>
+        deleteTemplate(
+          selectedTemplateId
+        )
+      }
+      style={toolBtn()}
+    >
+      Delete
+    </button>
+  </div>
+
+  <div
+    style={{
+      display: "flex",
+      gap: 8,
+      marginTop: 8,
+    }}
+  >
+    <input
+      value={newTemplateName}
+      onChange={(e) =>
+        setNewTemplateName(
+          e.target.value
+        )
+      }
+      placeholder="Template Name"
+      style={fieldStyle()}
+    />
+
+    <button
+      onClick={saveCurrentAsTemplate}
+      style={toolBtn()}
+    >
+      Save
+    </button>
+  </div>
+</div>
+
+              <div
+  style={{
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: 12,
+  }}
+>
+  <div
+    style={{
+      fontWeight: 600,
+      marginBottom: 10,
+    }}
+  >
+    Generate Timetable
+  </div>
+
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns:
+        "repeat(4,1fr)",
+      gap: 8,
+    }}
+  >
+    <input
+      type="time"
+      value={generatorStartTime}
+      onChange={(e) =>
+        setGeneratorStartTime(
+          e.target.value
+        )
+      }
+      style={fieldStyle()}
+    />
+
+    <input
+      type="number"
+      value={generatorPeriods}
+      onChange={(e) =>
+        setGeneratorPeriods(
+          Number(e.target.value)
+        )
+      }
+      style={fieldStyle()}
+    />
+
+    <input
+      type="number"
+      value={generatorBlockLength}
+      onChange={(e) =>
+        setGeneratorBlockLength(
+          Number(e.target.value)
+        )
+      }
+      style={fieldStyle()}
+    />
+
+    <input
+      type="number"
+      value={generatorBreakLength}
+      onChange={(e) =>
+        setGeneratorBreakLength(
+          Number(e.target.value)
+        )
+      }
+      style={fieldStyle()}
+    />
+  </div>
+
+  <label
+    style={{
+      display: "flex",
+      gap: 8,
+      marginTop: 10,
+    }}
+  >
+    <input
+      type="checkbox"
+      checked={autoInsertBreaks}
+      onChange={(e) =>
+        setAutoInsertBreaks(
+          e.target.checked
+        )
+      }
+    />
+    Auto Insert Recess & Lunch
+  </label>
+
+  <button
+    onClick={generateTimetable}
+    style={{
+      ...toolBtn(),
+      width: "100%",
+      marginTop: 10,
+    }}
+  >
+    Generate Timetable
+  </button>
+</div>
 
               <div
                 style={{
