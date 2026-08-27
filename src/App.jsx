@@ -75,9 +75,13 @@ function formatDateShort(iso) {
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
 function getGroupList(envValue) {
-  return (envValue || "")
-    .split(",")
-    .map((g) => g.trim())
+  return String(envValue || "")
+    .split(/[\n,;]+/)
+    .map((groupId) =>
+      groupId
+        .trim()
+        .replace(/^["']|["']$/g, "")
+    )
     .filter(Boolean);
 }
 
@@ -277,106 +281,283 @@ export default function ResourceBookingApp() {
     let cancelled = false;
 
     async function syncMicrosoftUser() {
-      if (!loaded) return;
+  if (!loaded) return;
 
-      if (!isAuthenticated) {
-        if (!cancelled) setSessionUser(null);
-        return;
-      }
+  if (!isAuthenticated) {
+    if (!cancelled) {
+      setSessionUser(null);
+    }
 
-      const account =
-        instance.getActiveAccount() ||
-        instance.getAllAccounts()[0];
-
-      if (!account) return;
-
-      const entraId = account.localAccountId;
-      const email = account.username?.trim().toLowerCase();
-      const name = account.name?.trim() || email;
-
-      const groups =
-  account.idTokenClaims?.groups || [];
-
-const accessGroups = getGroupList(
-  import.meta.env.VITE_BOOKING_ACCESS_GROUPS
-);
-
-const adminGroups = getGroupList(
-  import.meta.env.VITE_BOOKING_ADMIN_GROUPS
-);
-
-const isAdmin =
-  groups.some((groupId) =>
-    adminGroups.includes(groupId)
-  );
-
-const hasAccess =
-  isAdmin ||
-  groups.some((groupId) =>
-    accessGroups.includes(groupId)
-  );
-
-      if (!hasAccess) {
-  setLoadError(
-    "You do not have permission to access Resource Booking."
-  );
-
-  try {
-    await instance.logoutPopup();
-  } catch (e) {
-    console.error(e);
+    return;
   }
 
-  return;
-}
+  const account =
+    instance.getActiveAccount() ||
+    instance.getAllAccounts()[0];
 
-      if (!entraId || !email) {
-        console.error("Microsoft account did not return the required identity values.");
-        return;
+  if (!account) return;
+
+  const entraId =
+    account.localAccountId ||
+    account.idTokenClaims?.oid;
+
+  const email =
+    account.username
+      ?.trim()
+      .toLowerCase();
+
+  const name =
+    account.name?.trim() ||
+    email;
+
+  if (!entraId || !email) {
+    console.error(
+      "Microsoft account did not return the required identity values.",
+      {
+        entraId,
+        email,
       }
+    );
 
-      const existingUser = users.find(
-        (user) =>
-          user.entraId === entraId ||
-          user.email?.trim().toLowerCase() === email
+    if (!cancelled) {
+      setLoadError(
+        "Microsoft sign-in did not return the required user information."
       );
-
-      const syncedUser = {
-  id: existingUser?.id || crypto.randomUUID(),
-  entraId,
-  name,
-  email,
-  role: isAdmin ? "admin" : "user",
-};
-
-      try {
-        await api.upsertUserRow(syncedUser);
-        if (cancelled) return;
-
-        setSessionUser(syncedUser);
-        setUsers((previousUsers) => {
-          const index = previousUsers.findIndex(
-            (user) =>
-              user.id === syncedUser.id ||
-              user.entraId === entraId ||
-              user.email?.trim().toLowerCase() === email
-          );
-
-          if (index === -1) return [...previousUsers, syncedUser];
-
-          return previousUsers.map((user, userIndex) =>
-            userIndex === index ? { ...user, ...syncedUser } : user
-          );
-        });
-      } catch (error) {
-        console.error("Failed to sync Microsoft user:", error);
-        if (!cancelled) {
-          setLoadError(
-            "Microsoft sign-in succeeded, but the user account could not be synchronised."
-          );
-        }
-      }
     }
+
+    return;
+  }
+
+  const normaliseId = (value) =>
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  const tokenGroups = Array.isArray(
+    account.idTokenClaims?.groups
+  )
+    ? account.idTokenClaims.groups
+        .map(normaliseId)
+        .filter(Boolean)
+    : [];
+
+  const accessGroups =
+    getGroupList(
+      import.meta.env
+        .VITE_BOOKING_ACCESS_GROUPS
+    )
+      .map(normaliseId)
+      .filter(Boolean);
+
+  const adminGroups =
+    getGroupList(
+      import.meta.env
+        .VITE_BOOKING_ADMIN_GROUPS
+    )
+      .map(normaliseId)
+      .filter(Boolean);
+
+  const existingUser =
+    users.find(
+      (user) =>
+        normaliseId(user.entraId) ===
+          normaliseId(entraId) ||
+        user.email
+          ?.trim()
+          .toLowerCase() === email
+    );
+
+  const isAdminGroupMember =
+    tokenGroups.some((groupId) =>
+      adminGroups.includes(groupId)
+    );
+
+  const isAccessGroupMember =
+    tokenGroups.some((groupId) =>
+      accessGroups.includes(groupId)
+    );
+
+  const isExistingAdmin =
+    existingUser?.role === "admin";
+
+  const isAdmin =
+    isAdminGroupMember ||
+    isExistingAdmin;
+
+  const hasAccess =
+    isAdmin ||
+    isAccessGroupMember;
+
+  const hasGroupOverage =
+    account.idTokenClaims?.hasgroups ===
+      true ||
+    account.idTokenClaims
+      ?._claim_names?.groups != null;
+
+  console.log(
+    "Resource Booking access check",
+    {
+      email,
+      entraId,
+      tokenGroups,
+      accessGroups,
+      adminGroups,
+      isAccessGroupMember,
+      isAdminGroupMember,
+      isExistingAdmin,
+      hasAccess,
+      hasGroupOverage,
+    }
+  );
+
+  if (
+    accessGroups.length === 0 &&
+    adminGroups.length === 0
+  ) {
+    console.error(
+      "Resource Booking group variables were empty during the application build."
+    );
+
+    if (!cancelled) {
+      setLoadError(
+        "Resource Booking access groups are not configured. Contact IT."
+      );
+    }
+
+    return;
+  }
+
+  if (
+    tokenGroups.length === 0 &&
+    hasGroupOverage
+  ) {
+    console.error(
+      "Microsoft Entra group overage detected.",
+      account.idTokenClaims
+    );
+
+    if (!cancelled) {
+      setLoadError(
+        "Your Microsoft account has too many group memberships for Resource Booking to verify access from the sign-in token. Contact IT."
+      );
+    }
+
+    return;
+  }
+
+  if (
+    tokenGroups.length === 0 &&
+    !existingUser
+  ) {
+    console.error(
+      "No Microsoft Entra group claims were returned for the user.",
+      account.idTokenClaims
+    );
+
+    if (!cancelled) {
+      setLoadError(
+        "Resource Booking could not verify your Microsoft group membership. Contact IT."
+      );
+    }
+
+    return;
+  }
+
+  if (!hasAccess) {
+    console.warn(
+      "Resource Booking access denied.",
+      {
+        email,
+        tokenGroups,
+        accessGroups,
+        adminGroups,
+      }
+    );
+
+    if (!cancelled) {
+      setLoadError(
+        "You do not have permission to access Resource Booking."
+      );
+    }
+
+    return;
+  }
+
+  const syncedUser = {
+    id:
+      existingUser?.id ||
+      crypto.randomUUID(),
+    entraId,
+    name,
+    email,
+    role: isAdmin
+      ? "admin"
+      : "user",
+  };
+
+  try {
+    console.log(
+      "Adding or updating authorised user:",
+      syncedUser
+    );
+
+    await api.upsertUserRow(
+      syncedUser
+    );
+
+    if (cancelled) return;
+
+    setLoadError("");
+    setSessionUser(syncedUser);
+
+    setUsers((previousUsers) => {
+      const index =
+        previousUsers.findIndex(
+          (user) =>
+            user.id ===
+              syncedUser.id ||
+            normaliseId(
+              user.entraId
+            ) ===
+              normaliseId(
+                entraId
+              ) ||
+            user.email
+              ?.trim()
+              .toLowerCase() ===
+              email
+        );
+
+      if (index === -1) {
+        return [
+          ...previousUsers,
+          syncedUser,
+        ];
+      }
+
+      return previousUsers.map(
+        (user, userIndex) =>
+          userIndex === index
+            ? {
+                ...user,
+                ...syncedUser,
+              }
+            : user
+      );
+    });
+  } catch (error) {
+    console.error(
+      "Failed to sync Microsoft user:",
+      error
+    );
+
+    if (!cancelled) {
+      setLoadError(
+        "Microsoft sign-in succeeded, but the user account could not be synchronised."
+      );
+    }
+  }
+}
 
     syncMicrosoftUser();
     return () => {
